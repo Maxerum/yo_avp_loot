@@ -10,14 +10,9 @@ QT_END_NAMESPACE
 
 using namespace QtCharts;
 
-#define KB 1024
-#define MB 1024 * KB
-#define CACHE_SIZE 6 * MB / sizeof(ull)
-#define OFFSET 4 * MB / sizeof(ull)
-#define N 20
-#define TRIES 100
+#pragma intrinsic(__rdtsc)
+using namespace std;
 
-typedef unsigned long long int ull;
 
 class MainWindow : public QMainWindow
 {
@@ -26,8 +21,10 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-    void init(ull *array, size_t size, int assoc);
-    float testRead(ull *array);
+    void init(int blockSize, int offset, int n);
+    void show_time(double* timerArray);
+
+//    float testRead(ull *array);
 private:
     Ui::MainWindow *ui;
     QChart *chart;

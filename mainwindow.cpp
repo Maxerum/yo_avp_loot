@@ -8,7 +8,42 @@
 
 #pragma intrinsic(__rdtsc)
 
+struct CacheSize
+{
+    size_t size;
+    size_t lineSize;
+};
 
+int* arrray;
+int offset = 1 * 1024 * 1024;
+int const maxWay = 20;
+
+CacheSize getCacheSize(int level) {
+    CacheSize cacheLevel;
+    cacheLevel.lineSize = 0;
+    cacheLevel.size = 0;
+    DWORD bufferSize = 0;
+    DWORD i = 0;
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION * buffer = 0;
+
+    GetLogicalProcessorInformation(0, &bufferSize);
+    buffer = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION *)malloc(bufferSize);
+    GetLogicalProcessorInformation(&buffer[0], &bufferSize);
+
+    for (i = 0; i != bufferSize / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION); ++i) {
+        if (buffer[i].Relationship == RelationCache && buffer[i].Cache.Level == level) {
+            cacheLevel.size = buffer[i].Cache.Size;
+            cacheLevel.lineSize = buffer[i].Cache.LineSize;
+            break;
+        }
+    }
+
+    free(buffer);
+    return cacheLevel;
+}
+
+
+int cacheSize = (int)(getCacheSize(1).size);
 
 using namespace std;
 
@@ -23,126 +58,85 @@ MainWindow::MainWindow(QWidget *parent)
     ui->widget->setChart(chart);
 
     QLineSeries *series = new QLineSeries();
+    chart->legend()->hide();
 
 
-            // Create chart, add data, hide legend, and add axis
-//            QChart *chart = new QChart();
-            chart->legend()->hide();
+    QFont font;
+    font.setPixelSize(18);
 
+    QPen pen(QRgb(0x000000));
+    pen.setWidth(5);
+     series->setPen(pen);
 
-            // Customize the title font
-            QFont font;
-            font.setPixelSize(18);
+   cout << "Cache Size: " << cacheSize << " Bytes." << endl;
 
+   arrray = (int*)malloc(offset * maxWay * sizeof(int));
 
+    double timerArray[maxWay];
+    register unsigned long long startTicks = 0;
+    register unsigned long long endTicks = 0;
+    register unsigned long long resultTicks = 0;
+    register int index = 0;
 
-            // Change the line color and weight
-            QPen pen(QRgb(0x000000));
-            pen.setWidth(5);
-            series->setPen(pen);
+    for (int i = 1; i <= maxWay; i++) {
+        startTicks = 0;
+        endTicks = 0;
+        index = 0;
 
-//            chart->setAnimationOptions(QChart::AllAnimations);
+        init(cacheSize / i, offset, i);//инициализируем массив размером, который будет составлять часть размера кэш-памяти , смещение между блоками,
 
-            // Change the x axis categories
-//            QCategoryAxis *axisX = new QCategoryAxis();
-//            axisX->append(0);
-//            axisX->append("1987",1);
-//            axisX->append("1988",2);
-//            axisX->append("1989",3);
-//            axisX->append("1990",4);
-//            axisX->append("1991",5);
-//            axisX->append("1992",6);
-//            chart->setAxisX(axisX, series);
+        startTicks = __rdtsc();
+        for (int i = 1; i <= maxWay; i++) {
+            do {
+                index = arrray[index];
+            } while (index != 0);
+        }
+        endTicks = __rdtsc();
 
-            // Used to display the chart
-//            QChartView *chartView = new QChartView(chart);
-//            chartView->setRenderHint(QPainter::Antialiasing);
+        resultTicks = endTicks - startTicks;
+        timerArray[i - 1] = (double)(resultTicks) ;
+        series->append(i, (double)(resultTicks));
 
-//    QValueAxis *axisX = new QValueAxis;
-////    axisX->setRange(0, 20);
-////    axisX->setTickCount(11);
-////    axisX->setLabelFormat("%.2f");
-
-//    QValueAxis *axisY = new QValueAxis;
-////    axisY->setRange(0, 2000000000);
-////    axisX->setTickCount(11);
-////    axisX->setLabelFormat("%g");
-
-//    QLineSeries* series1 = new QLineSeries();
-//    QLineSeries* series2 = new QLineSeries();
-
-    ull* array;
-    float delay;
-    array = new ull[OFFSET * N];
-    for (int i = 1; i <= N; i++) {
-         init(array, CACHE_SIZE, i);
-         delay = testRead(array);
-         cout << setw(2) << i << " : " << setw(8) << delay << " secs" << endl;
-         series->append(i, delay);
     }
+
+    show_time(timerArray);
     chart->addSeries(series);
     chart->createDefaultAxes();
-//    chrt->addSeries(series1);
-//    chrt->addSeries(series2);
-//    chrt->setAxisX(axisX, series1);
-//    chrt->setAxisY(axisY, series1);
-//    chrt->setAxisX(axisX, series2);
-//    chrt->setAxisX(axisY, series2);
-
-    delete[] array;
 
 }
 
-void MainWindow::init(ull *array, size_t size, int assoc){
-
-    ZeroMemory(array, OFFSET * N);
-
-    if (assoc == 1) {
-
-        for (size_t i = 0; i < size - 1; i++) {
-
-            array[i] = i + 1;
+void MainWindow::init(int blockSize, int offset, int n){
+    for (int i = 0; i < blockSize; i++) {
+            for (int j = 0; j < n; j++) {
+                if (j < n - 1) {
+                    arrray[j * offset + i] = (j + 1) * offset + i;
+                }
+                else if (i < blockSize - 1) {
+                    arrray[j * offset + i] = i + 1;
+                }
+                else {
+                    arrray[j * offset + i] = 0;
+                }
+            }
         }
-        return;
-    }
-
-    size_t blockSize = size % assoc == 0 ? size / assoc : size / assoc + 1;
-    size_t currentOffset = 0;
-
-    for (size_t i = 0; i < assoc - 1; i++) {
-
-        for (size_t j = 0; j < blockSize; j++)
-            array[currentOffset + j] = currentOffset + OFFSET + j;
-
-        currentOffset += OFFSET;
-    }
-
-    for (size_t i = 0; i < blockSize; i++)
-        array[currentOffset + i] = i + 1;
 }
 
-float MainWindow::testRead(ull *array) {
 
-    ull index = 0;
-//    ull startTicks = __rdtsc();
-    float delay;
-    LARGE_INTEGER start,finish, frequency;
-    QueryPerformanceCounter(&start);
-    for (int i = 0; i < TRIES; i++) {
+void MainWindow::show_time(double* timerArray) {
+    double value = 0;
 
-        do {
-            index = array[index];
-        } while (index);
+    for (int i = 0; i < maxWay; i++) {
+        printf("%02i ", i + 1);
+
+        value = 0.0;
+        printf("Time - %.0lf ticks\n", timerArray[i]);
     }
-    QueryPerformanceCounter(&finish);
-            delay = (finish.QuadPart - start.QuadPart)/100000;
-//    ull endTicks = __rdtsc();
-     return delay;
-//    return (endTicks - startTicks)/ TRIES;
 }
+
+
+
 
 MainWindow::~MainWindow()
 {
     delete ui;
 }
-
